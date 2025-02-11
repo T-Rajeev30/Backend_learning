@@ -32,7 +32,7 @@ const userSchema = new Schema(
     },
     coverImage: {
       type: String, // Cloudnary URL
-      required: true,
+      default: "",
     },
     watchHistory: [
       {
