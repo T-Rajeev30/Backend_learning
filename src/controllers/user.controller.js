@@ -7,6 +7,8 @@ import jwt from "jsonwebtoken";
 import { upload } from "../middlewares/multer.middleware.js";
 import mongoose from "mongoose";
 
+/// Access and request token for generating Access and refresh token
+// it will find the user and will generate access token and refresh token for it
 const generateAccessAndRefereshTokens = async (userId) => {
   try {
     const user = await User.findById(userId);
@@ -14,8 +16,7 @@ const generateAccessAndRefereshTokens = async (userId) => {
     const refreshToken = user.generateRefreshToken();
 
     user.refreshToken = refreshToken;
-    await user.save({ validateBeforeSave: false });
-
+    await user.save({ validateBeforeSave: false }); //ValidateBefore save is amn operation
     return { accessToken, refreshToken };
   } catch (error) {
     throw new APIerror(
@@ -39,6 +40,9 @@ const registerUser = asyncHandler(async (req, res, next) => {
     // console.log("Incoming Request: ", req.body, req.files);
     const { fullName, email, username, password } = req.body;
     ///                      Get user Deatails form frontend
+
+    // console.log(req.body);
+
     if (
       [fullName, email, username, password].some(
         (field) => field?.trim() === ""
@@ -132,4 +136,103 @@ const registerUser = asyncHandler(async (req, res, next) => {
   // }
 });
 
-export { registerUser };
+const loginUser = asyncHandler(async (req, res) => {
+  // (Actual todos)
+  // password check
+  // access and refresh token
+  // send cookies
+  // send a message to frontend for the  verification
+
+  // req.body => data
+  const { email, username, password } = req.body;
+
+  // username  or email or fullname
+  if (!username && !email) {
+    throw new APIerror(400, "username or email is required");
+  }
+  // here is an alternative  of th eabovve code based on logic discussion
+  // if( !username || email) {
+  //  throw new APIERROR (400 , "username or email is required ")
+  // }
+
+  // find the user  /// here the User is used form moongose it not the registered user
+  const user = await User.findOne({
+    $or: [{ username }, { email }],
+  });
+
+  if (!user) {
+    throw new APIerror(404, "User does not exist");
+  }
+
+  const isPasswordValid = await user.isPasswordCorrect(password); // here we are Validating the password from the user which we have created
+  if (!isPasswordValid) {
+    throw new APIerror(401, "Invalid User Credentials");
+  }
+
+  const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(
+    user._id
+  );
+
+  const loggedInUser = await User.findById(user._id).select(
+    "-password  -refreshToken"
+  );
+
+  // Sending cookies and also
+  // Cookies can by default be chnanged by forntend
+  const options = {
+    httpOnly: true,
+    // but doing these step will make the cokkies more secure which can only be seen and modified at the server side
+    secure: true,
+  };
+
+  return res
+    .send(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+      new APIresponse(
+        200,
+        {
+          //user wants to save accesstoken and refreshtoken by itself in it's local storag
+          user: loggedInUser,
+          accessToken,
+          refreshToken,
+        },
+        "User logged in SuccessFully"
+      )
+    );
+
+  //{(Written by tiwari )
+  //validation from backend that either esername , email , full name exist
+  // if exist then match it with access token
+  // give access to the logged in user }
+});
+
+// If we directly take the email from user and wants to log out that user so anyone can logout anyones account
+// We are using middlewAre for logout user
+
+const logoutUser = asyncHandler(async (req, res) => {
+  await User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $set: {
+        refreshToken: undefined,
+      },
+    },
+    {
+      new: true,
+    }
+  );
+  const options = {
+    httpOnly: true,
+    // but doing these step will make the cokkies more secure which can only be seen and modified at the server side
+    secure: true,
+  };
+  return res
+    .status(200)
+    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", options)
+    .json(new APIresponse(200, {}, "User logged Out"));
+});
+
+export { registerUser, loginUser, logoutUser };
