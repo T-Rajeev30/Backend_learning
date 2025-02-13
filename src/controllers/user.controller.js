@@ -9,16 +9,27 @@ import mongoose from "mongoose";
 
 /// Access and request token for generating Access and refresh token
 // it will find the user and will generate access token and refresh token for it
-const generateAccessAndRefereshTokens = async (userId) => {
+const generateAccessAndRefreshTokens = async (userId) => {
   try {
+    // console.log("Generating tokens for user:", userId); // Add this log
+
     const user = await User.findById(userId);
+
+    if (!user) {
+      throw new APIerror(404, "User not found while generating tokens");
+    }
+
     const accessToken = user.generateAccessToken();
     const refreshToken = user.generateRefreshToken();
+
+    // console.log("Tokens generated successfully", { accessToken, refreshToken }); // Add this log
 
     user.refreshToken = refreshToken;
     await user.save({ validateBeforeSave: false }); //ValidateBefore save is amn operation
     return { accessToken, refreshToken };
   } catch (error) {
+    console.error("Error while generating tokens:", error);
+
     throw new APIerror(
       500,
       "Something went wrong while generating referesh and access token"
@@ -90,7 +101,7 @@ const registerUser = asyncHandler(async (req, res, next) => {
     const coverImage = await uploadOnCloudinary(coverImageLocalPath);
 
     if (!avatar) {
-      throw new ApiError(400, "Avatar file is required");
+      throw new APIerror(400, "Avatar file is required");
     }
 
     // console.log("Cloudinary coverImage upload result :", coverImage);
@@ -150,6 +161,8 @@ const loginUser = asyncHandler(async (req, res) => {
   if (!username && !email) {
     throw new APIerror(400, "username or email is required");
   }
+  // console.log(`Got user with this ${username} or ${email}`);
+
   // here is an alternative  of th eabovve code based on logic discussion
   // if( !username || email) {
   //  throw new APIERROR (400 , "username or email is required ")
@@ -160,18 +173,30 @@ const loginUser = asyncHandler(async (req, res) => {
     $or: [{ username }, { email }],
   });
 
+  // console.log("User found", user);
   if (!user) {
+    // console.log("USer not found");
     throw new APIerror(404, "User does not exist");
   }
 
+  // console.log("Checking password...");
+
   const isPasswordValid = await user.isPasswordCorrect(password); // here we are Validating the password from the user which we have created
+
+  // console.log("Is password Valif", isPasswordValid);
+
   if (!isPasswordValid) {
+    // console.log("invalid password");
+
     throw new APIerror(401, "Invalid User Credentials");
   }
 
-  const { accessToken, refreshToken } = await generateAccessAndRefereshTokens(
+  // console.log("Generating Access and Refresh Tokens...");
+
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
     user._id
   );
+  console.log(`Tokens generated successfully `);
 
   const loggedInUser = await User.findById(user._id).select(
     "-password  -refreshToken"
@@ -186,7 +211,7 @@ const loginUser = asyncHandler(async (req, res) => {
   };
 
   return res
-    .send(200)
+    .status(200)
     .cookie("accessToken", accessToken, options)
     .cookie("refreshToken", refreshToken, options)
     .json(
