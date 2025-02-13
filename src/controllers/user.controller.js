@@ -157,6 +157,8 @@ const loginUser = asyncHandler(async (req, res) => {
   // req.body => data
   const { email, username, password } = req.body;
 
+  // console.log(process.env.ACCESS_TOKEN_EXPIRY);
+
   // username  or email or fullname
   if (!username && !email) {
     throw new APIerror(400, "username or email is required");
